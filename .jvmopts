@@ -1,0 +1,15 @@
+-Dfile.encoding=UTF8
+-server
+-Xmx2G
+-Xms2G
+-Xss4m
+-XX:+UseG1GC
+-XX:MaxGCPauseMillis=800
+-XX:G1HeapWastePercent=20
+-XX:MinHeapFreeRatio=10
+-XX:MaxHeapFreeRatio=20
+-XX:MaxMetaspaceSize=600m
+-XX:MetaspaceSize=200m
+-XX:ReservedCodeCacheSize=512m
+-XX:+UseCodeCacheFlushing
+
