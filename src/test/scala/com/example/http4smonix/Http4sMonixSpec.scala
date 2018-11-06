@@ -65,15 +65,15 @@ final class Http4sMonixSpec
       .resource[F](defaultConfig)
       .use { client =>
         for {
-          _ <- handleError(traverse(mkRequest(client, List.range(520, 530))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(531, 540))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(541, 550))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(551, 560))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(561, 570))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
           _ <- traverse(mkRequest(client, List.fill(20)(200)))
         } yield ()
@@ -138,15 +138,15 @@ final class Http4sMonixSpec
       .resource
       .use { client =>
         for {
-          _ <- handleError(traverse(mkRequest(client, List.range(520, 530))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(531, 540))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(541, 550))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(551, 560))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(561, 570))))(
+          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
             _ => Seq.empty[String])
           _ <- traverse(mkRequest(client, List.fill(20)(200)))
         } yield ()
