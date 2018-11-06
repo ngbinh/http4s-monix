@@ -1,8 +1,8 @@
-val Http4sVersion = "0.20.0-M1"
-val CirceVersion = "0.10.1"
+val Http4sVersion = "0.18.21"
+val CirceVersion = "0.9.3"
 val ScalaTestVersion = "3.0.5"
 val LogbackVersion = "1.2.3"
-val MonixVersion = "3.0.0-RC2-840c090"
+val MonixVersion = "3.0.0-RC1"
 val Log4sVersion = "1.6.1"
 
 lazy val root = (project in file("."))
@@ -23,7 +23,7 @@ lazy val root = (project in file("."))
       "org.log4s" %% "log4s" % Log4sVersion,
       "ch.qos.logback" % "logback-classic" % LogbackVersion
     ),
-    addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
+    addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.7"),
     addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4")
   )
 

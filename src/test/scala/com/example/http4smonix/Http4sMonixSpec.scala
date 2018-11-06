@@ -10,7 +10,7 @@ import org.asynchttpclient.DefaultAsyncHttpClientConfig
 import org.http4s.Uri.{Authority, RegName, Scheme}
 import org.http4s.client.Client
 import org.http4s.client.asynchttpclient.AsyncHttpClient
-import org.http4s.client.blaze.BlazeClientBuilder
+import org.http4s.client.blaze.{BlazeClientConfig, Http1Client}
 import org.http4s.util.threads.threadFactory
 
 import scala.concurrent.duration.FiniteDuration
@@ -27,6 +27,7 @@ final class Http4sMonixSpec
     with EitherValues {
 
   private val log = org.log4s.getLogger
+  private val timeout = FiniteDuration(30, TimeUnit.SECONDS)
 
   def testAsyncHttp[F[_]: Monad](traverse: Seq[F[String]] => F[Seq[String]])(
       implicit concurrentEffect: ConcurrentEffect[F],
@@ -61,33 +62,30 @@ final class Http4sMonixSpec
       }
     }
 
-    AsyncHttpClient
-      .resource[F](defaultConfig)
-      .use { client =>
-        for {
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- traverse(mkRequest(client, List.fill(20)(200)))
-        } yield ()
-      }
+    val client = AsyncHttpClient[F](defaultConfig)
+    for {
+      _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(_ =>
+        Seq.empty[String])
+      _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(_ =>
+        Seq.empty[String])
+      _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(_ =>
+        Seq.empty[String])
+      _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(_ =>
+        Seq.empty[String])
+      _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(_ =>
+        Seq.empty[String])
+      _ <- traverse(mkRequest(client, List.fill(5)(200)))
+    } yield ()
+
   }
 
-  private val timeout = FiniteDuration(10, TimeUnit.SECONDS)
 
   "Monix with AsyncHttpClient" - {
     "should works with sequence()" in {
       testAsyncHttp[Task](Task.sequence)
         .timeout(timeout)
         .attempt
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
 
@@ -95,7 +93,7 @@ final class Http4sMonixSpec
       testAsyncHttp[Task](Task.gather)
         .timeout(timeout)
         .attempt
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
 
@@ -103,7 +101,7 @@ final class Http4sMonixSpec
       testAsyncHttp[Task](Task.gatherUnordered)
         .timeout(timeout)
         .attempt
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
   }
@@ -131,47 +129,46 @@ final class Http4sMonixSpec
       }
     }
 
-    BlazeClientBuilder[F](scala.concurrent.ExecutionContext.Implicits.global)
-      .withMaxWaitQueueLimit(200)
-      .withRequestTimeout(FiniteDuration(10, TimeUnit.SECONDS))
-      .withMaxTotalConnections(4)
-      .resource
-      .use { client =>
-        for {
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
-            _ => Seq.empty[String])
-          _ <- traverse(mkRequest(client, List.fill(20)(200)))
-        } yield ()
-      }
+    val config = BlazeClientConfig.defaultConfig.copy(
+      maxTotalConnections = 4
+    )
+
+    Http1Client(config).flatMap { client =>
+      for {
+        _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
+          _ => Seq.empty[String])
+        _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
+          _ => Seq.empty[String])
+        _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
+          _ => Seq.empty[String])
+        _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
+          _ => Seq.empty[String])
+        _ <- handleError(traverse(mkRequest(client, List.range(500, 550))))(
+          _ => Seq.empty[String])
+        _ <- traverse(mkRequest(client, List.fill(5)(200)))
+      } yield ()
+    }
   }
 
   "Monix with Blaze[Task]" - {
     "should works with sequence()" in {
       testBlaze[Task](Task.sequence).attempt
         .timeout(timeout)
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
 
     "should works with gather()" in {
       testBlaze[Task](Task.gather).attempt
         .timeout(timeout)
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
 
     "but fails with gatherUnordered()" in {
       testBlaze[Task](Task.gatherUnordered).attempt
         .timeout(timeout)
-        .runToFuture
+        .runAsync
         .map(_ should be('right))
     }
   }
