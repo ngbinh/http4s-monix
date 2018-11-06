@@ -2,27 +2,37 @@ package com.example.http4smonix
 
 import java.util.concurrent.TimeUnit
 
+import cats.Monad
+import cats.effect.ConcurrentEffect
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
 import org.asynchttpclient.DefaultAsyncHttpClientConfig
 import org.http4s.Uri.{Authority, RegName, Scheme}
+import org.http4s.client.Client
 import org.http4s.client.asynchttpclient.AsyncHttpClient
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.util.threads.threadFactory
 
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 // scalastyle:off underscore.import
 import org.http4s._
 import org.scalatest._
+import cats.syntax.all._
 // scalastyle:on underscore.import
 
-final class Http4sMonixSpec extends AsyncFreeSpecLike with Matchers with EitherValues {
+final class Http4sMonixSpec
+    extends AsyncFreeSpecLike
+    with Matchers
+    with EitherValues {
 
   private val log = org.log4s.getLogger
 
-  def testAsyncHttp(traverse: Seq[Task[String]] => Task[Seq[String]], timeout: FiniteDuration): Future[Assertion] = {
+  def testAsyncHttp[F[_]: Monad](traverse: Seq[F[String]] => F[Seq[String]])(
+      implicit concurrentEffect: ConcurrentEffect[F],
+      monad: Monad[F]): F[Unit] = {
+
+    import concurrentEffect._
 
     val defaultConfig = new DefaultAsyncHttpClientConfig.Builder()
       .setMaxConnectionsPerHost(4)
@@ -33,93 +43,136 @@ final class Http4sMonixSpec extends AsyncFreeSpecLike with Matchers with EitherV
       }))
       .build()
 
-    val task = AsyncHttpClient.resource[Task](defaultConfig)
-      .use { client =>
-        val list: Seq[Task[String]] = List.range(1, 30).map { i =>
-          val uri = Uri(
-            scheme = Some(Scheme.https),
-            authority = Some(Authority(host = RegName("httpbin.org"))),
-            path = s"/status/${500 + i}"
-          )
-          val request = Request[Task](
-            method = Method.GET,
-            uri = uri
-          )
-          client.expect[String](request).onErrorHandleWith { error =>
-            log.error(error)(s"request to $uri")
-            Task.raiseError(error)
-          }
+    def mkRequest(client: Client[F], list: List[Int]) = {
+      list.map { i =>
+        val uri = Uri(
+          scheme = Some(Scheme.https),
+          authority = Some(Authority(host = RegName("httpbin.org"))),
+          path = s"/status/$i"
+        )
+        val request = Request[F](
+          method = Method.GET,
+          uri = uri
+        )
+        handleErrorWith(client.expect[String](request)) { error =>
+          log.error(error)(s"request to $uri")
+          raiseError(error)
         }
+      }
+    }
 
+    AsyncHttpClient
+      .resource[F](defaultConfig)
+      .use { client =>
         for {
-          _ <- traverse(list).onErrorFallbackTo(Task(Seq.empty[String]))
-          _ <- traverse(list).onErrorFallbackTo(Task(Seq.empty[String]))
+          _ <- handleError(traverse(mkRequest(client, List.range(520, 530))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(531, 540))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(541, 550))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(551, 560))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(561, 570))))(
+            _ => Seq.empty[String])
+          _ <- traverse(mkRequest(client, List.fill(20)(200)))
         } yield ()
       }
-
-
-    task.timeout(timeout).attempt.runToFuture.map(_ should be ('right))
   }
+
+  private val timeout = FiniteDuration(10, TimeUnit.SECONDS)
 
   "Monix with AsyncHttpClient" - {
     "should works with sequence()" in {
-      testAsyncHttp(Task.sequence, FiniteDuration(10, TimeUnit.SECONDS))
+      testAsyncHttp[Task](Task.sequence)
+        .timeout(timeout)
+        .attempt
+        .runToFuture
+        .map(_ should be('right))
     }
 
     "still works with gather()" in {
-      testAsyncHttp(Task.gather, FiniteDuration(10, TimeUnit.SECONDS))
+      testAsyncHttp[Task](Task.gather)
+        .timeout(timeout)
+        .attempt
+        .runToFuture
+        .map(_ should be('right))
     }
 
     "still works with gatherUnordered()" in {
-      testAsyncHttp(Task.gatherUnordered, FiniteDuration(10, TimeUnit.SECONDS))
+      testAsyncHttp[Task](Task.gatherUnordered)
+        .timeout(timeout)
+        .attempt
+        .runToFuture
+        .map(_ should be('right))
     }
   }
 
-  def testBlaze(traverse: Seq[Task[String]] => Task[Seq[String]], timeout: FiniteDuration): Future[Assertion] = {
+  def testBlaze[F[_]](
+      traverse: Seq[F[String]] => F[Seq[String]]
+  )(implicit concurrentEffect: ConcurrentEffect[F]): F[Unit] = {
+    import concurrentEffect._
 
-    val task = BlazeClientBuilder[Task](scala.concurrent.ExecutionContext.Implicits.global)
+    def mkRequest(client: Client[F], list: List[Int]) = {
+      list.map { i =>
+        val uri = Uri(
+          scheme = Some(Scheme.https),
+          authority = Some(Authority(host = RegName("httpbin.org"))),
+          path = s"/status/$i"
+        )
+        val request = Request[F](
+          method = Method.GET,
+          uri = uri
+        )
+        handleErrorWith(client.expect[String](request)) { error =>
+          log.error(error)(s"request to $uri")
+          raiseError(error)
+        }
+      }
+    }
+
+    BlazeClientBuilder[F](scala.concurrent.ExecutionContext.Implicits.global)
       .withMaxWaitQueueLimit(200)
       .withRequestTimeout(FiniteDuration(10, TimeUnit.SECONDS))
       .withMaxTotalConnections(4)
       .resource
       .use { client =>
-        val list: Seq[Task[String]] = List.range(1, 30).map { i =>
-          val uri = Uri(
-            scheme = Some(Scheme.https),
-            authority = Some(Authority(host = RegName("httpbin.org"))),
-            path = s"/status/${500 + i}"
-          )
-          val request = Request[Task](
-            method = Method.GET,
-            uri = uri
-          )
-          client.expect[String](request).onErrorHandleWith { error =>
-            log.error(error)(s"request to $uri")
-            Task.raiseError(error)
-          }
-        }
-
         for {
-          _ <- traverse(list).onErrorFallbackTo(Task(Seq.empty[String]))
-          _ <- traverse(list).onErrorFallbackTo(Task(Seq.empty[String]))
+          _ <- handleError(traverse(mkRequest(client, List.range(520, 530))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(531, 540))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(541, 550))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(551, 560))))(
+            _ => Seq.empty[String])
+          _ <- handleError(traverse(mkRequest(client, List.range(561, 570))))(
+            _ => Seq.empty[String])
+          _ <- traverse(mkRequest(client, List.fill(20)(200)))
         } yield ()
       }
-
-
-    task.timeout(timeout).attempt.runToFuture.map(_ should be ('right))
   }
 
-  "Monix with Blaze" - {
+  "Monix with Blaze[Task]" - {
     "should works with sequence()" in {
-      testBlaze(Task.sequence, FiniteDuration(10, TimeUnit.SECONDS))
+      testBlaze[Task](Task.sequence).attempt
+        .timeout(timeout)
+        .runToFuture
+        .map(_ should be('right))
     }
 
-    "should works with gatherUnordered()" in {
-      testBlaze(Task.gatherUnordered, FiniteDuration(10, TimeUnit.SECONDS))
+    "should works with gather()" in {
+      testBlaze[Task](Task.gather).attempt
+        .timeout(timeout)
+        .runToFuture
+        .map(_ should be('right))
     }
 
-    "but fails with gather()" in {
-      testBlaze(Task.gather, FiniteDuration(10, TimeUnit.SECONDS))
+    "but fails with gatherUnordered()" in {
+      testBlaze[Task](Task.gatherUnordered).attempt
+        .timeout(timeout)
+        .runToFuture
+        .map(_ should be('right))
     }
   }
 }
